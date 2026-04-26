@@ -575,7 +575,7 @@ def predict_in_patches(
         batch = batch.to(patched_probabilities.device)  # Transfer back to the original device to avoid memory leaks
 
     if n_skipped > 0:
-        logger.debug(f"Skipped {n_skipped} batches because they only contained NaNs")
+        logger.info(f"Skipped {n_skipped} batches because they only contained NaNs")
 
     patched_probabilities = patched_probabilities.view(bs, nh, nw, patch_size, patch_size)
 
