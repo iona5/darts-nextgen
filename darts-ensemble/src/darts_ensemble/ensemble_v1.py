@@ -124,6 +124,7 @@ class EnsembleV1:
         reflection: int = 0,
         keep_inputs: bool = False,
         zoom_factor: int = 0,
+        patch_output_path: Path | None = None,
     ) -> xr.Dataset:
         """Run ensemble inference on a single tile by averaging multiple model predictions.
 
@@ -143,6 +144,8 @@ class EnsembleV1:
                 It is applied after the inference, before the reconstruction.
                 Workaround for models which do bilinear upsampling in the segmentation head, which causes pixel-offsets.
                 Defaults to 0.
+            patch_output_path (Path | None, optional): Path to save patch outputs, if any.
+                Defaults to None.
 
         Returns:
             xr.Dataset: Input tile augmented with:
@@ -180,12 +183,19 @@ class EnsembleV1:
         """
         probabilities = {}
         for model_name, model in self.models.items():
+            if patch_output_path is not None and patch_output_path.exists():
+                model_patch_output_path = patch_output_path / model_name
+                model_patch_output_path.mkdir()
+            else:
+                model_patch_output_path = None
+
             probabilities[model_name] = model.segment_tile(
                 tile,
                 batch_size=batch_size,
                 reflection=reflection,
                 zoom_factor=zoom_factor,
-            )["probabilities"]  # .copy()
+                patch_output_path=model_patch_output_path,
+            )["probabilities"].copy()
 
         # calculate the mean
         tile["probabilities"] = xr.concat(probabilities.values(), dim="model_probs").mean(dim="model_probs")
@@ -203,6 +213,7 @@ class EnsembleV1:
         reflection: int = 0,
         keep_inputs: bool = False,
         zoom_factor: int = 0,
+        patch_output_path: Path | None = None,
     ) -> list[xr.Dataset]:
         """Run inference on a list of tiles.
 
@@ -216,6 +227,7 @@ class EnsembleV1:
                 It is applied after the inference, before the reconstruction.
                 Workaround for models which do bilinear upsampling in the segmentation head, which causes pixel-offsets.
                 Defaults to 0.
+            patch_output_path (Path | None, optional): Path to save patch outputs, if any. Defaults to None.
 
         Returns:
             A list of input tiles augmented by a predicted `probabilities` layer with type float32 and range [0, 1].
@@ -228,6 +240,7 @@ class EnsembleV1:
                 reflection=reflection,
                 keep_inputs=keep_inputs,
                 zoom_factor=zoom_factor,
+                patch_output_path=patch_output_path,
             )
             for tile in tiles
         ]
@@ -257,6 +270,7 @@ class EnsembleV1:
         reflection: int = 0,
         keep_inputs: bool = False,
         zoom_factor: int = 0,
+        patch_output_path: Path | None = None,
     ) -> xr.Dataset | list[xr.Dataset]:
         """Run the ensemble on the given tile.
 
@@ -270,6 +284,7 @@ class EnsembleV1:
                 It is applied after the inference, before the reconstruction.
                 Workaround for models which do bilinear upsampling in the segmentation head, which causes pixel-offsets.
                 Defaults to 0.
+            patch_output_path (Path | None, optional): Path to save patch outputs, if any. Defaults to None.
 
         Returns:
             xr.Dataset: Output tile with the ensemble applied.
@@ -285,6 +300,7 @@ class EnsembleV1:
                 reflection=reflection,
                 keep_inputs=keep_inputs,
                 zoom_factor=zoom_factor,
+                patch_output_path=patch_output_path,
             )
         elif isinstance(input, list):
             return self.segment_tile_batched(
@@ -293,6 +309,7 @@ class EnsembleV1:
                 reflection=reflection,
                 keep_inputs=keep_inputs,
                 zoom_factor=zoom_factor,
+                patch_output_path=patch_output_path,
             )
         else:
             raise ValueError("Input must be an xr.Dataset or a list of xr.Dataset.")

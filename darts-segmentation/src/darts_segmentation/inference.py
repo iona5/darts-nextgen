@@ -8,11 +8,13 @@ import logging
 import math
 from collections.abc import Generator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, NamedTuple, overload
 from warnings import deprecated
 
 import torch
 import torch.nn as nn
+import torchvision.io
 
 # from rich.progress import track
 
@@ -503,6 +505,7 @@ def predict_in_patches(
     reflection: int,
     device: torch.device,
     return_weights: bool = False,
+    patch_output_path: Path | None = None,
 ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
     """Predict on a tensor using the legacy patching pipeline.
 
@@ -517,6 +520,7 @@ def predict_in_patches(
         device (torch.device): The device to use for the prediction.
         return_weights (bool, optional): Whether to return weights for debugging.
             Defaults to False.
+        patch_output_path (Path, optional): Write PNG files of each path into this folder. Default is to write no files.
 
     Returns:
         torch.Tensor: Predicted probabilities with shape (BS, H, W).
@@ -583,10 +587,24 @@ def predict_in_patches(
     prediction = torch.zeros(bs, h, w, device=tensor_tiles.device)
     weights = torch.zeros(bs, h, w, device=tensor_tiles.device)
 
+    if patch_output_path is not None and not patch_output_path.exists():
+        logger.error(f"patch_output_path '{patch_output_path}' does not exist, skipping saving of patches.")
+        patch_output_path = None
+
     for y, x, patch_idx_h, patch_idx_w in patch_coords(h, w, patch_size, overlap):
+        logger.debug(f"===> {x} {y} {patch_idx_w} {patch_idx_w}")
         patch = patched_probabilities[:, patch_idx_h, patch_idx_w]
         prediction[:, y : y + patch_size, x : x + patch_size] += patch * soft_margin
         weights[:, y : y + patch_size, x : x + patch_size] += soft_margin
+
+        if patch_output_path is not None:
+            patch_file_path = (patch_output_path / f"patch_{x}_{y}_{patch_idx_w:02}_{patch_idx_h:02}.png").absolute()
+            logger.debug(f"write image {patch.shape} to '{patch_file_path}'")
+            patch_int8 = (patch * 255).byte()
+            torchvision.io.write_png(
+                patch_int8,
+                str(patch_file_path),
+            )
 
     # Avoid division by zero
     weights = torch.where(weights == 0, torch.ones_like(weights), weights)

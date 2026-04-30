@@ -172,7 +172,12 @@ class SMPSegmenter:
         print_kwargs=["batch_size", "reflection"],
     )
     def segment_tile(
-        self, tile: xr.Dataset, batch_size: int = 8, reflection: int = 0, zoom_factor: int = 0
+        self,
+        tile: xr.Dataset,
+        batch_size: int = 8,
+        reflection: int = 0,
+        zoom_factor: int = 0,
+        patch_output_path: Path | None = None,
     ) -> xr.Dataset:
         """Run semantic segmentation inference on a single tile.
 
@@ -192,6 +197,8 @@ class SMPSegmenter:
                 It is applied after the inference, before the reconstruction.
                 Workaround for models which do bilinear upsampling in the segmentation head, which causes pixel-offsets.
                 Defaults to 0.
+            patch_output_path (Path | None, optional): Path to save intermediate patch outputs.
+                If None, no patches are saved. Defaults to None.
 
         Returns:
             xr.Dataset: Input tile augmented with a new data variable:
@@ -244,6 +251,7 @@ class SMPSegmenter:
             device=self.device,
             reflection=reflection,
             zoom_factor=zoom_factor,
+            # patch_output_path=patch_output_path, # TODO: implement stuff from predict_in_patches() in forward()
         ).squeeze(0)
 
         # Highly sophisticated DL-based predictor
@@ -263,6 +271,7 @@ class SMPSegmenter:
         overlap: int = 16,
         batch_size: int = 8,
         reflection: int = 0,
+        patch_output_path: Path | None = None,
     ) -> xr.Dataset | list[xr.Dataset]:
         """Run inference on a single tile or a list of tiles.
 
@@ -273,6 +282,8 @@ class SMPSegmenter:
             batch_size (int): The batch size for the prediction, NOT the batch_size of input tiles.
                 Tensor will be sliced into patches and these again will be infered in batches. Defaults to 8.
             reflection (int): Reflection-Padding which will be applied to the edges of the tensor. Defaults to 0.
+            patch_output_path (Path | None, optional): Path to save intermediate patch outputs.
+                If None, no patches are saved. Defaults to None.
 
         Returns:
             A single tile or a list of tiles augmented by a predicted `probabilities` layer, depending on the input.
@@ -283,7 +294,12 @@ class SMPSegmenter:
 
         """
         if isinstance(input, xr.Dataset):
-            return self.segment_tile(input, batch_size=batch_size, reflection=reflection)
+            return self.segment_tile(
+                input,
+                batch_size=batch_size,
+                reflection=reflection,
+                patch_output_path=patch_output_path,
+            )
         elif isinstance(input, list):
             raise NotImplementedError("Currently passing multiple datasets at once is not supported.")
         else:

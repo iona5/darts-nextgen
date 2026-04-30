@@ -2,6 +2,8 @@
 
 import json
 import logging
+import shutil
+import tempfile
 import textwrap
 import time
 from abc import ABC, abstractmethod
@@ -144,6 +146,8 @@ class _BasePipeline(ABC):
         overwrite (bool): Whether to overwrite existing output files. Defaults to False.
         offline (bool): If True, will not attempt to download any missing data. Defaults to False.
         debug_data (bool): If True, writes intermediate data for debugging purposes. Defaults to False.
+        debug_patches (bool): If True, writes the raw patch output into a subfolder of the output folder.
+            Defaults to False.
 
     """
 
@@ -179,6 +183,7 @@ class _BasePipeline(ABC):
     overwrite: bool = False
     offline: bool = False
     debug_data: bool = False
+    debug_patches: bool = False
 
     def __post_init__(self):
         paths.set_defaults(self.default_dirs)
@@ -637,6 +642,13 @@ class _BasePipeline(ABC):
                         self.device,
                     )
 
+                # write patches into a temporary directory, we move those
+                # into the output once we have completed the export
+                patches_folder = None
+                if self.debug_patches:
+                    patches_folder = Path(tempfile.mkdtemp())
+                    logging.debug(f"Temporary folder for inference result patches created at '{patches_folder}'")
+
                 with timer("Segmenting", log=False):
                     tile = ensemble.segment_tile(
                         tile,
@@ -644,6 +656,7 @@ class _BasePipeline(ABC):
                         reflection=self.reflection,
                         keep_inputs=self.write_model_outputs,
                         zoom_factor=self.zoom_factor,
+                        patch_output_path=patches_folder,
                     )
 
                 with timer("Postprocessing", log=False):
@@ -669,6 +682,10 @@ class _BasePipeline(ABC):
                         metadata=export_metadata,
                         debug=self.debug_data,
                     )
+
+                if patches_folder is not None and patches_folder.exists():
+                    logging.debug(f"adding debug patches to {outpath}")
+                    shutil.move(patches_folder, outpath / "_patches")
 
                 n_tiles += 1
                 results.append(
@@ -764,6 +781,8 @@ class PlanetPipeline(_BasePipeline):
         overwrite (bool): Overwrite existing output files. Defaults to False.
         offline (bool): Skip downloading missing data. Defaults to False.
         debug_data (bool): Write intermediate debugging data. Defaults to False.
+        debug_patches (bool): If True, writes the raw patch output into a subfolder of the output folder.
+            Defaults to False.
 
     """
 
@@ -976,6 +995,8 @@ class Sentinel2Pipeline(_BasePipeline):
         overwrite (bool): Overwrite existing output files. Defaults to False.
         offline (bool): Skip downloading missing data. Requires pre-downloaded data. Defaults to False.
         debug_data (bool): Write intermediate debugging data to output directory. Defaults to False.
+        debug_patches (bool): If True, writes the raw patch output into a subfolder of the output folder.
+            Defaults to False.
 
     """
 
