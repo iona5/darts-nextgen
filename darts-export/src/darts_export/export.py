@@ -207,7 +207,10 @@ def export_tile(  # noqa: C901
     raster_tags = metadata
 
     if debug:
-        manager.to_netcdf(tile, out_dir / "darts_inference_debug.nc", crop=False)
+        try:
+            manager.to_netcdf(tile, out_dir / "darts_inference_debug.nc", crop=False)
+        except Exception as e:
+            logger.warning(f"debug data export failed: {e.__class__.__name__} - {e}")
 
     for band in bands:
         match band:
